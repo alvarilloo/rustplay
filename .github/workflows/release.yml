@@ -1,0 +1,95 @@
+name: Release
+
+# Pushing a tag like v0.2.0 builds the installer, the MSIX and the portable zip, and publishes them
+# (with their SHA-256 checksums, which the in-app updater checks) as a GitHub release.
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing tag to (re)build and publish, e.g. v0.1.0"
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+    env:
+      TAG: ${{ github.event.inputs.tag || github.ref_name }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TAG }}
+
+      - name: Check that the tag matches the crate version
+        shell: pwsh
+        run: |
+          $version = (Select-String -Path Cargo.toml -Pattern '^version\s*=\s*"([0-9]+\.[0-9]+\.[0-9]+)"').Matches[0].Groups[1].Value
+          if ("v$version" -ne $env:TAG) { throw "Tag $env:TAG does not match Cargo.toml version $version" }
+          "VERSION=$version" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Test
+        run: cargo test --workspace
+
+      - name: Build
+        run: cargo build --release -p rustplay -p rustplay-cli
+
+      - name: Make sure Inno Setup is available
+        shell: pwsh
+        run: |
+          $iscc = Join-Path ${env:ProgramFiles(x86)} "Inno Setup 6\ISCC.exe"
+          if (-not (Test-Path $iscc)) { choco install innosetup -y --no-progress }
+
+      - name: Installer, MSIX and portable zip
+        shell: pwsh
+        run: |
+          ./packaging/build-installer.ps1 -SkipBuild
+          ./packaging/build-msix.ps1 -SkipBuild -Sign
+          ./packaging/build-portable.ps1 -SkipBuild
+          New-Item -ItemType Directory -Force out | Out-Null
+          Copy-Item "target/installer/RustPlay-Setup-$env:VERSION.exe" out
+          Copy-Item "target/msix/RustPlay_$($env:VERSION).0_x64.msix" out
+          Copy-Item "target/msix/RustPlay-dev.cer" out
+          Copy-Item "dist/RustPlay-$env:VERSION-portable.zip" out
+          # `<hex>  <name>` per file: the updater reads <installer>.sha256, and SHA256SUMS covers the rest.
+          Get-ChildItem out -File | Where-Object { $_.Extension -ne ".sha256" } | ForEach-Object {
+            $hash = (Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLower()
+            "$hash  $($_.Name)" | Out-File -FilePath "$($_.FullName).sha256" -Encoding ascii
+          }
+          Get-ChildItem out -File -Filter *.sha256 | ForEach-Object { Get-Content $_.FullName } |
+            Out-File -FilePath out/SHA256SUMS -Encoding ascii
+
+      - name: Publish the release
+        shell: pwsh
+        run: |
+          $notes = @"
+          RustPlay $env:VERSION: free, open-source AirPlay sender and receiver for Windows.
+
+          ## Installation
+
+          **Installer (recommended)**
+          1. Download ``RustPlay-Setup-$env:VERSION.exe``.
+          2. Run it and follow the steps. If Windows SmartScreen warns about an unknown publisher, click *More info* then *Run anyway*.
+          3. When asked, allow RustPlay on **private networks** in the Windows Firewall.
+          4. Open RustPlay from the Start menu. The app updates itself from new releases.
+
+          **MSIX package**: import ``RustPlay-dev.cer`` into *Trusted People* (as administrator), then open ``RustPlay_$($env:VERSION).0_x64.msix``.
+
+          **Portable**: unzip ``RustPlay-$env:VERSION-portable.zip`` anywhere and run ``RustPlay.exe``. It does not update itself.
+
+          Checksums of every file are in ``SHA256SUMS``.
+          "@
+          gh release view $env:TAG 2>$null
+          if ($LASTEXITCODE -ne 0) {
+            gh release create $env:TAG --title "RustPlay $env:VERSION" --notes "$notes" --verify-tag
+          }
+          gh release upload $env:TAG (Get-ChildItem out -File).FullName --clobber

@@ -1,0 +1,17 @@
+RustPlay
+Copyright (C) 2026 The RustPlay contributors
+
+This program is free software: you can redistribute it and/or modify it under
+the terms of the GNU General Public License as published by the Free Software
+Foundation, either version 3 of the License, or (at your option) any later
+version. See LICENSE.
+
+This work is derived from, or ports code and protocol knowledge from:
+
+- UxPlay (https://github.com/FDH2/UxPlay), GPL-3.0, including code from
+  RPiPlay and shairplay (LGPL-2.1+) by Juho Vähä-Herttua and others.
+- playfair (bundled in UxPlay, lib/playfair), see its LICENSE.md.
+- MultiDrop (https://github.com/digitaldanis/multidrop), GPL-3.0.
+- doubletake (https://github.com/omarroth/doubletake), LGPL-3.0-or-later.
+- FFmpeg libavcodec AAC decoder (https://ffmpeg.org), LGPL-2.1+, for the
+  AAC-ELD decoder port, if included.

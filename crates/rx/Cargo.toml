@@ -1,0 +1,23 @@
+[package]
+name = "rustplay-rx"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+rustplay-core.workspace = true
+tokio.workspace = true
+tokio-util.workspace = true
+bytes.workspace = true
+tracing.workspace = true
+plist.workspace = true
+aes = "0.9"
+ctr = "0.10"
+
+[dev-dependencies]
+ed25519-dalek.workspace = true
+tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }
+
+[lints]
+workspace = true

@@ -1,0 +1,25 @@
+[package]
+name = "rustplay-tx"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+rustplay-core.workspace = true
+tokio.workspace = true
+tokio-util.workspace = true
+bytes.workspace = true
+tracing.workspace = true
+plist.workspace = true
+rand.workspace = true
+uuid.workspace = true
+aes = "0.9"
+chacha20poly1305 = "0.11"
+cbc = "0.2"
+
+[dev-dependencies]
+rustplay-rx.workspace = true
+
+[lints]
+workspace = true
