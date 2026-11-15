@@ -820,18 +820,22 @@ impl App {
 
         self.section(x, y, w, t("about.support"));
         y += 26.0;
-        let (_, body_h) = self.gfx.measure(t("about.support_body"), Font::Body, w, true);
-        self.gfx.paragraph(t("about.support_body"), Font::Body, Rect::new(x + 2.0, y, w, body_h + 4.0), th.text_secondary);
+        // The Microsoft Store package only links to the project page: no external donation links.
+        let store = crate::autostart::is_packaged();
+        let support_body = if store { t("about.support_body_store") } else { t("about.support_body") };
+        let (_, body_h) = self.gfx.measure(support_body, Font::Body, w, true);
+        self.gfx.paragraph(support_body, Font::Body, Rect::new(x + 2.0, y, w, body_h + 4.0), th.text_secondary);
         y += body_h + 14.0;
         let tiles = [
             (LinkKind::GitHub, "GitHub", t("about.github_desc"), Color::rgb(0x24, 0x29, 0x2F), Color::rgb(0xFF, 0xFF, 0xFF)),
             (LinkKind::Coffee, "Ko-fi", t("about.coffee_desc"), Color::rgb(0xFF, 0x5E, 0x5B), Color::rgb(0xFF, 0xFF, 0xFF)),
             (LinkKind::PayPal, "PayPal", t("about.paypal_desc"), Color::rgb(0x00, 0x30, 0x87), Color::rgb(0xFF, 0xFF, 0xFF)),
         ];
-        let columns = if (w - 16.0) / 3.0 >= 220.0 { 3 } else { 1 };
+        let count = if store { 1 } else { tiles.len() };
+        let columns = if count > 1 && (w - 16.0) / 3.0 >= 220.0 { 3 } else { 1 };
         let tile_w = if columns == 3 { (w - 16.0) / 3.0 } else { w };
         let tile_h = 76.0;
-        for (i, (kind, title, description, background, foreground)) in tiles.into_iter().enumerate() {
+        for (i, (kind, title, description, background, foreground)) in tiles.into_iter().enumerate().take(count) {
             let (col, row) = (i % columns, i / columns);
             let rect = Rect::new(x + col as f32 * (tile_w + 8.0), y + row as f32 * (tile_h + GAP), tile_w, tile_h);
             let hover = self.card_interactive(Id::Link(kind), rect, true);
@@ -849,7 +853,7 @@ impl App {
             let arrow = th.text_tertiary.mix(th.text, hover);
             self.gfx.glyph(glyph::OPEN_EXTERNAL, Font::IconSmall, rect.right() - 20.0, rect.y + 20.0, arrow);
         }
-        let rows = tiles_rows(columns);
+        let rows = tiles_rows(columns, count);
         y += rows as f32 * (tile_h + GAP) + 28.0;
 
         let blocks: [(&str, &str); 3] = [
@@ -980,6 +984,6 @@ impl App {
     }
 }
 
-fn tiles_rows(columns: usize) -> usize {
-    3_usize.div_ceil(columns)
+fn tiles_rows(columns: usize, count: usize) -> usize {
+    count.div_ceil(columns)
 }
