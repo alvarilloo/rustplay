@@ -61,6 +61,9 @@ enum Kind {
     Update,
 }
 
+// Microsoft Store «Downloads and updates» page, where Store installs of RustPlay get updated.
+const STORE_UPDATES: &str = "ms-windows-store://downloadsandupdates";
+
 impl App {
     fn notify(&mut self, kind: Kind, title: &str, body: &str) {
         let s = &self.settings;
@@ -138,12 +141,13 @@ impl App {
         }
     }
 
+    // The MSIX package never asks GitHub: the Store (or whoever sideloaded it) delivers updates.
     pub(super) fn can_check_updates(&self) -> bool {
-        crate::update::configured_repo().is_some()
+        !crate::autostart::is_packaged() && crate::update::configured_repo().is_some()
     }
 
     pub(super) fn check_updates(&mut self) {
-        if self.extras.pending.is_some() {
+        if self.extras.pending.is_some() || !self.can_check_updates() {
             return;
         }
         // While links.rs still has the placeholder there is no repository to ask.
@@ -304,6 +308,10 @@ impl App {
                 self.check_updates();
                 return;
             }
+            Id::UpdateStore => {
+                crate::links::open(STORE_UPDATES);
+                return;
+            }
             Id::UpdateInstall => {
                 self.start_install();
                 return;
@@ -374,6 +382,22 @@ impl App {
 
         self.section(x, y, w, t("settings.updates"));
         y += 30.0;
+        if crate::autostart::is_packaged() {
+            // The MSIX package has no GitHub updater: the Store keeps it up to date.
+            let store = crate::autostart::is_store_install();
+            let (title, description) = if store {
+                (t("settings.update_store"), t("settings.update_store_desc"))
+            } else {
+                (t("settings.update_sideload"), t("settings.update_sideload_desc"))
+            };
+            let label = t("update.open_store");
+            let bw = self.button_width(label, Some(super::glyph::OPEN_EXTERNAL));
+            let rect = self.row(Rect::new(x, y, w, ROW_H), glyph::UPDATE, title, description, bw + 16.0, true);
+            if store {
+                self.button(Id::UpdateStore, Rect::new(rect.right() - 16.0 - bw, rect.y + 18.0, bw, 32.0), label, Some(super::glyph::OPEN_EXTERNAL), Style::Standard, true);
+            }
+            return y + ROW_H + 28.0;
+        }
         let available = self.can_check_updates();
         let rect = self.row(Rect::new(x, y, w, ROW_H), glyph::UPDATE, t("settings.update_check"), t("settings.update_check_desc"), 160.0, available);
         self.toggle_with_label(Id::UpdateAuto, rect.right() - 16.0, rect.y + rect.h / 2.0, self.settings.update_check, available);

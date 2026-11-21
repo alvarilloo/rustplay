@@ -27,6 +27,12 @@ pub fn is_packaged() -> bool {
     })
 }
 
+// True when the MSIX package was installed from the Microsoft Store (not sideloaded by hand).
+pub fn is_store_install() -> bool {
+    use windows::ApplicationModel::{Package, PackageSignatureKind};
+    is_packaged() && Package::Current().and_then(|p| p.SignatureKind()).is_ok_and(|kind| kind == PackageSignatureKind::Store)
+}
+
 pub fn is_portable() -> bool {
     rustplay_core::identity::is_portable()
 }

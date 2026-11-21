@@ -238,6 +238,7 @@ enum Id {
     NotifyErrors,
     UpdateAuto,
     UpdateCheck,
+    UpdateStore,
     UpdateOpen,
     UpdateInstall,
     UpdateInstallNow,
@@ -431,11 +432,11 @@ pub struct App {
     restart: Restart,
     // Start of the entrance animation, the first time the window is shown.
     intro: Option<Instant>,
-    attention: bool,
     // The logo part of the start-up animation is skipped (first launch, which opens the tour instead).
     splash_skipped: bool,
     // The welcome tour was opened by itself on the first launch.
     onboarding_tour: bool,
+    attention: bool,
     running_name: String,
     // Whether the running receiver announced video playback (needs a restart to change).
     running_app_videos: bool,
@@ -524,8 +525,8 @@ impl App {
             })
             .unwrap_or_default();
         let settings = Settings::load();
-        let names = crate::monitors::friendly_names();
         let first_run = !settings.onboarding_done;
+        let names = crate::monitors::friendly_names();
         let monitors = rustplay_core::media::capture::list_monitors()
             .unwrap_or_default()
             .iter()
@@ -1706,6 +1707,7 @@ impl App {
             }
             Id::Notifications | Id::NotifyConnections | Id::NotifyErrors | Id::UpdateAuto
             | Id::UpdateCheck
+            | Id::UpdateStore
             | Id::UpdateOpen
             | Id::UpdateInstall
             | Id::UpdateInstallNow
