@@ -1,0 +1,130 @@
+name: Microsoft Store
+
+# Pushing a tag like v0.2.0 builds the MSIX with the Store identity, ready to upload to Partner
+# Center (Store installs of RustPlay then update by themselves). Download it from the run's
+# «RustPlay-store-msix» artifact and add it to a new submission: App → Update → Packages.
+#
+# Required (repository Settings → Secrets and variables → Actions → Variables), from
+# Partner Center → your app → Product identity:
+#   STORE_IDENTITY_NAME            Package/Identity/Name, e.g. 12345Alvaro.RustPlay
+#   STORE_PUBLISHER                Package/Identity/Publisher, e.g. CN=ABCD1234-...
+#   STORE_PUBLISHER_DISPLAY_NAME   Package/Properties/PublisherDisplayName
+#
+# Optional automatic submission, only if the developer account has a Microsoft Entra tenant
+# (free; Partner Center → Account settings → Tenants). With all of these set the run also submits:
+#   Variable STORE_PRODUCT_ID (Store ID, e.g. 9NXXXXXXXXXX) and secrets STORE_TENANT_ID,
+#   STORE_CLIENT_ID, STORE_CLIENT_SECRET, STORE_SELLER_ID (an Entra app added to Partner Center →
+#   Account settings → User management → Microsoft Entra applications, with the Manager role).
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing tag to build, e.g. v0.1.0"
+        required: true
+      submit:
+        description: "With automatic submission configured: send it for certification (otherwise it stays as a draft)"
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: store-${{ github.event.inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  store:
+    runs-on: windows-latest
+    env:
+      TAG: ${{ github.event.inputs.tag || github.ref_name }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TAG }}
+
+      - name: Check the configuration and that the tag matches the crate version
+        id: config
+        shell: pwsh
+        env:
+          IDENTITY_NAME: ${{ vars.STORE_IDENTITY_NAME }}
+          PUBLISHER: ${{ vars.STORE_PUBLISHER }}
+          PUBLISHER_DISPLAY_NAME: ${{ vars.STORE_PUBLISHER_DISPLAY_NAME }}
+          PRODUCT_ID: ${{ vars.STORE_PRODUCT_ID }}
+          TENANT_ID: ${{ secrets.STORE_TENANT_ID }}
+          CLIENT_ID: ${{ secrets.STORE_CLIENT_ID }}
+          CLIENT_SECRET: ${{ secrets.STORE_CLIENT_SECRET }}
+          SELLER_ID: ${{ secrets.STORE_SELLER_ID }}
+        run: |
+          $set = { param($names) $names | Where-Object { -not [Environment]::GetEnvironmentVariable($_) } }
+          $missing = & $set @("IDENTITY_NAME", "PUBLISHER", "PUBLISHER_DISPLAY_NAME")
+          if ($missing) { throw "Missing Store identity variables: $($missing -join ', '). See the comments at the top of store.yml." }
+          $submission = @("PRODUCT_ID", "TENANT_ID", "CLIENT_ID", "CLIENT_SECRET", "SELLER_ID")
+          $absent = & $set $submission
+          if ($absent.Count -eq 0) {
+            "submit=true" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          } elseif ($absent.Count -lt $submission.Count) {
+            Write-Warning "Automatic submission is only partly configured (missing $($absent -join ', ')); the package will only be built."
+          }
+          $version = (Select-String -Path Cargo.toml -Pattern '^version\s*=\s*"([0-9]+\.[0-9]+\.[0-9]+)"').Matches[0].Groups[1].Value
+          if ("v$version" -ne $env:TAG) { throw "Tag $env:TAG does not match Cargo.toml version $version" }
+          "VERSION=$version" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Test
+        run: cargo test --workspace
+
+      - name: Build the Store MSIX
+        shell: pwsh
+        run: |
+          cargo build --release -p rustplay
+          if ($LASTEXITCODE -ne 0) { throw "Build failed" }
+          # The Store signs the package itself, so it is built unsigned.
+          ./packaging/build-msix.ps1 -SkipBuild `
+            -IdentityName "${{ vars.STORE_IDENTITY_NAME }}" `
+            -Publisher "${{ vars.STORE_PUBLISHER }}" `
+            -PublisherDisplayName "${{ vars.STORE_PUBLISHER_DISPLAY_NAME }}"
+          $msix = "target/msix/RustPlay_$($env:VERSION).0_x64.msix"
+          if (-not (Test-Path $msix)) { throw "$msix was not produced" }
+          "MSIX=$msix" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: RustPlay-store-msix
+          path: ${{ env.MSIX }}
+          retention-days: 90
+
+      - name: Upload instructions
+        if: steps.config.outputs.submit != 'true'
+        shell: pwsh
+        run: |
+          @"
+          ## RustPlay $env:VERSION for the Microsoft Store
+
+          1. Download the **RustPlay-store-msix** artifact of this run and unzip it.
+          2. In Partner Center open RustPlay → **Update** (new submission) → **Packages**.
+          3. Drag ``RustPlay_$($env:VERSION).0_x64.msix`` in, remove the previous package and **Save**.
+          4. **Submit to the Store**. Once it passes certification, Store installs update by themselves.
+          "@ | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+
+      - name: Install the Microsoft Store Developer CLI
+        if: steps.config.outputs.submit == 'true'
+        uses: microsoft/setup-msstore-cli@v1
+
+      - name: Submit the update
+        if: steps.config.outputs.submit == 'true'
+        shell: pwsh
+        run: |
+          msstore reconfigure --tenantId "${{ secrets.STORE_TENANT_ID }}" --sellerId "${{ secrets.STORE_SELLER_ID }}" `
+            --clientId "${{ secrets.STORE_CLIENT_ID }}" --clientSecret "${{ secrets.STORE_CLIENT_SECRET }}"
+          if ($LASTEXITCODE -ne 0) { throw "Could not sign in to Partner Center" }
+          $arguments = @("publish", $env:MSIX, "--appId", "${{ vars.STORE_PRODUCT_ID }}")
+          if ("${{ github.event.inputs.submit }}" -eq "false") { $arguments += "--noCommit" }
+          msstore @arguments
+          if ($LASTEXITCODE -ne 0) { throw "msstore publish failed" }
