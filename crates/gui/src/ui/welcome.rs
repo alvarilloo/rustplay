@@ -89,7 +89,7 @@ impl App {
         self.welcome_prev = None;
     }
 
-    // Shows the tour by itself the first time, once the start-up animation has ended.
+    // Shows the tour by itself the first time, from the very first frame (the logo animation is skipped).
     pub(super) fn maybe_open_onboarding(&mut self) {
         if !self.settings.onboarding_done
             && self.welcome.is_none()
@@ -99,10 +99,15 @@ impl App {
             && !crate::preview::active()
         {
             self.open_welcome();
+            self.onboarding_tour = true;
         }
     }
 
     pub(super) fn close_welcome(&mut self) {
+        // After the first-launch tour the window comes in with its usual entrance, without the logo.
+        if std::mem::take(&mut self.onboarding_tour) && super::animations_enabled() {
+            self.intro = Instant::now().checked_sub(std::time::Duration::from_secs_f32(super::splash::SHELL_DELAY));
+        }
         self.welcome = None;
         self.welcome_prev = None;
         self.kb_focus = None;

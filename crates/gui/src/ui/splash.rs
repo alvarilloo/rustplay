@@ -36,6 +36,9 @@ fn ease_out(t: f32) -> f32 {
 impl App {
     // Seconds since the window first appeared while the start-up animation runs.
     pub(super) fn splash_time(&self) -> Option<f32> {
+        if self.splash_skipped {
+            return None;
+        }
         let t = self.intro?.elapsed().as_secs_f32();
         (t < END).then_some(t)
     }

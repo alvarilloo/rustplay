@@ -432,6 +432,10 @@ pub struct App {
     // Start of the entrance animation, the first time the window is shown.
     intro: Option<Instant>,
     attention: bool,
+    // The logo part of the start-up animation is skipped (first launch, which opens the tour instead).
+    splash_skipped: bool,
+    // The welcome tour was opened by itself on the first launch.
+    onboarding_tour: bool,
     running_name: String,
     // Whether the running receiver announced video playback (needs a restart to change).
     running_app_videos: bool,
@@ -521,6 +525,7 @@ impl App {
             .unwrap_or_default();
         let settings = Settings::load();
         let names = crate::monitors::friendly_names();
+        let first_run = !settings.onboarding_done;
         let monitors = rustplay_core::media::capture::list_monitors()
             .unwrap_or_default()
             .iter()
@@ -584,7 +589,9 @@ impl App {
             recording_since: None,
             last_saved: None,
             restart: Restart::None,
-            intro: (!background).then(Instant::now),
+            intro: (!background && !first_run).then(Instant::now),
+            splash_skipped: first_run,
+            onboarding_tour: false,
             attention: false,
             running_name: String::new(),
             running_app_videos: false,
@@ -748,7 +755,7 @@ impl App {
         self.visible = visible;
         // The start-up animation plays the first time the window shows, unless Windows has
         // animations turned off (Accessibility → Visual effects).
-        if visible && self.intro.is_none() && !self.intro_done && animations_enabled() {
+        if visible && self.intro.is_none() && !self.intro_done && self.settings.onboarding_done && animations_enabled() {
             self.intro = Some(Instant::now());
         }
         self.intro_done |= visible;
