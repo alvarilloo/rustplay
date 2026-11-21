@@ -737,7 +737,7 @@ dependencies = [
 
 [[package]]
 name = "rustplay"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "embed-resource",
  "plist",
@@ -755,7 +755,7 @@ dependencies = [
 
 [[package]]
 name = "rustplay-cli"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "clap",
  "rustplay-core",
@@ -768,7 +768,7 @@ dependencies = [
 
 [[package]]
 name = "rustplay-core"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "aes",
  "bytes",
@@ -799,7 +799,7 @@ dependencies = [
 
 [[package]]
 name = "rustplay-rx"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "aes",
  "bytes",
@@ -814,7 +814,7 @@ dependencies = [
 
 [[package]]
 name = "rustplay-tx"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "aes",
  "bytes",
